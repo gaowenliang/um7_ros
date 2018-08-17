@@ -1,0 +1,16 @@
+<launch>
+
+<node pkg="um7"
+      name="um7"
+      type="um7_driver"
+      output="screen">
+      <param name="port" value="2.0"/>
+      <param name="vehicle_wheelbase" value="/dev/ttyUSB0"/>
+      <param name="baud" value="921600"/>
+      <param name="update_rate" value="250"/>
+      <param name="mag_updates" value="false"/>
+      <param name="quat_mode" value="false"/>
+      <param name="zero_gyros" value="true"/>
+</node>
+
+</launch>
