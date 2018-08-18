@@ -32,8 +32,9 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#include <string>
-
+#include "../include/um7/comms.h"
+#include "../include/um7/registers.h"
+#include "../include/um7/synctime.h"
 #include "geometry_msgs/Vector3Stamped.h"
 #include "ros/ros.h"
 #include "sensor_msgs/Imu.h"
@@ -41,14 +42,13 @@
 #include "std_msgs/Float32.h"
 #include "std_msgs/Header.h"
 #include "um7/Reset.h"
-#include "um7/comms.h"
-#include "um7/registers.h"
+#include <string>
 
 const char VERSION[10] = "0.0.2"; // um7_driver version
 
-// Don't try to be too clever. Arrival of this message triggers
-// us to publish everything we have.
-const uint8_t TRIGGER_PACKET = DREG_EULER_PHI_THETA;
+// Don't try to be too clever.
+// Arrival of this message triggers us to publish everything we have.
+const uint8_t TRIGGER_PACKET = DREG_MAG_PROC_Z; // DREG_EULER_PHI_THETA
 
 /**
  * Function generalizes the process of writing an XYZ vector into consecutive
@@ -160,19 +160,20 @@ configureSensor( um7::Comms* sensor, ros::NodeHandle* private_nh )
     }
 
     uint32_t rate_bits = static_cast< uint32_t >( rate );
-    ROS_INFO( "Setting update rate to %uHz", rate );
-    uint32_t raw_rate = ( rate_bits << RATE2_ALL_RAW_START );
-    r.comrate2.set( 0, raw_rate );
-    if ( !sensor->sendWaitAck( r.comrate2 ) )
-    {
-        throw std::runtime_error( "Unable to set CREG_COM_RATES2." );
-    }
 
     uint32_t proc_rate = ( rate_bits << RATE4_ALL_PROC_START );
     r.comrate4.set( 0, proc_rate );
     if ( !sensor->sendWaitAck( r.comrate4 ) )
     {
         throw std::runtime_error( "Unable to set CREG_COM_RATES4." );
+    }
+
+    ROS_INFO( "Setting update rate to %uHz", rate );
+    uint32_t raw_rate = ( rate_bits << RATE2_ALL_RAW_START );
+    r.comrate2.set( 0, raw_rate );
+    if ( !sensor->sendWaitAck( r.comrate2 ) )
+    {
+        throw std::runtime_error( "Unable to set CREG_COM_RATES2." );
     }
 
     uint32_t misc_rate = ( rate_bits << RATE5_EULER_START ) | ( rate_bits << RATE5_QUAT_START );
@@ -247,27 +248,19 @@ handleResetService( um7::Comms* sensor, const um7::Reset::Request& req, const um
  * the ROS messages which are output.
  */
 void
-publishMsgs( um7::Registers& r, ros::NodeHandle* imu_nh, sensor_msgs::Imu& imu_msg, bool tf_ned_to_enu )
+publishMsgs( um7::Registers& r,
+             ros::Publisher& imu_pub,
+             ros::Publisher& mag_pub,
+             ros::Publisher& temp_pub,
+             sensor_msgs::Imu& imu_msg,
+             bool tf_ned_to_enu )
 {
-    static ros::Publisher imu_pub = imu_nh->advertise< sensor_msgs::Imu >( "data", 1, false );
-    static ros::Publisher mag_pub
-    = imu_nh->advertise< geometry_msgs::Vector3Stamped >( "mag", 1, false );
-    static ros::Publisher rpy_pub
-    = imu_nh->advertise< geometry_msgs::Vector3Stamped >( "rpy", 1, false );
-    static ros::Publisher temp_pub = imu_nh->advertise< std_msgs::Float32 >( "temperature", 1, false );
-
     if ( imu_pub.getNumSubscribers( ) > 0 )
     {
         // body-fixed frame NED to ENU: (x y z)->(x -y -z) or (w x y z)->(x -y -z w)
         // world frame      NED to ENU: (x y z)->(y  x -z) or (w x y z)->(y  x -z w)
         if ( tf_ned_to_enu )
         {
-            // world frame
-            imu_msg.orientation.w = r.quat.get_scaled( 2 );
-            imu_msg.orientation.x = r.quat.get_scaled( 1 );
-            imu_msg.orientation.y = -r.quat.get_scaled( 3 );
-            imu_msg.orientation.z = r.quat.get_scaled( 0 );
-
             // body-fixed frame
             imu_msg.angular_velocity.x = r.gyro.get_scaled( 0 );
             imu_msg.angular_velocity.y = -r.gyro.get_scaled( 1 );
@@ -280,11 +273,6 @@ publishMsgs( um7::Registers& r, ros::NodeHandle* imu_nh, sensor_msgs::Imu& imu_m
         }
         else
         {
-            imu_msg.orientation.w = r.quat.get_scaled( 0 );
-            imu_msg.orientation.x = r.quat.get_scaled( 1 );
-            imu_msg.orientation.y = r.quat.get_scaled( 2 );
-            imu_msg.orientation.z = r.quat.get_scaled( 3 );
-
             imu_msg.angular_velocity.x = r.gyro.get_scaled( 0 );
             imu_msg.angular_velocity.y = r.gyro.get_scaled( 1 );
             imu_msg.angular_velocity.z = r.gyro.get_scaled( 2 );
@@ -296,6 +284,8 @@ publishMsgs( um7::Registers& r, ros::NodeHandle* imu_nh, sensor_msgs::Imu& imu_m
 
         imu_pub.publish( imu_msg );
     }
+
+    // std::cout << "gyr t " << r.gyr_t.get_scaled( 0 ) << "\n";
 
     // Magnetometer.  transform to ROS axes
     if ( mag_pub.getNumSubscribers( ) > 0 )
@@ -318,29 +308,6 @@ publishMsgs( um7::Registers& r, ros::NodeHandle* imu_nh, sensor_msgs::Imu& imu_m
         }
 
         mag_pub.publish( mag_msg );
-    }
-
-    // Euler attitudes.  transform to ROS axes
-    if ( rpy_pub.getNumSubscribers( ) > 0 )
-    {
-        geometry_msgs::Vector3Stamped rpy_msg;
-        rpy_msg.header = imu_msg.header;
-
-        if ( tf_ned_to_enu )
-        {
-            // world frame
-            rpy_msg.vector.x = r.euler.get_scaled( 1 );
-            rpy_msg.vector.y = r.euler.get_scaled( 0 );
-            rpy_msg.vector.z = -r.euler.get_scaled( 2 );
-        }
-        else
-        {
-            rpy_msg.vector.x = r.euler.get_scaled( 0 );
-            rpy_msg.vector.y = r.euler.get_scaled( 1 );
-            rpy_msg.vector.z = r.euler.get_scaled( 2 );
-        }
-
-        rpy_pub.publish( rpy_msg );
     }
 
     // Temperature
@@ -438,14 +405,24 @@ main( int argc, char** argv )
                 = imu_nh.advertiseService< um7::Reset::Request, um7::Reset::Response >(
                 "reset", boost::bind( handleResetService, &sensor, _1, _2 ) );
 
+                ros::Publisher imu_pub = imu_nh.advertise< sensor_msgs::Imu >( "data", 1, false );
+                ros::Publisher mag_pub
+                = imu_nh.advertise< geometry_msgs::Vector3Stamped >( "mag", 1, false );
+                ros::Publisher temp_pub
+                = imu_nh.advertise< std_msgs::Float32 >( "temperature", 1, false );
+
+                SoftSyncTime sync;
+
                 while ( ros::ok( ) )
                 {
                     // triggered by arrival of last message packet
-                    if ( sensor.receive( &registers ) == TRIGGER_PACKET )
+                    int16_t add = sensor.receive( &registers );
+                    //  std::cout << "get " << add << "\n";
+                    if ( add == DREG_EULER_PHI_THETA || add == DREG_QUAT_AB )
                     {
                         // Triggered by arrival of final message in group.
-                        imu_msg.header.stamp = ros::Time::now( );
-                        publishMsgs( registers, &imu_nh, imu_msg, tf_ned_to_enu );
+                        imu_msg.header.stamp = sync.getTime( registers );
+                        publishMsgs( registers, imu_pub, mag_pub, temp_pub, imu_msg, tf_ned_to_enu );
                         ros::spinOnce( );
                     }
                 }

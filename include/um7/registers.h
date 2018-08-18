@@ -49,7 +49,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "um7/firmware_registers.h"
+#include "firmware_registers.h"
 
 #define TO_RADIANS ( M_PI / 180.0 )
 #define TO_DEGREES ( 180.0 / M_PI )
@@ -157,14 +157,15 @@ class Registers
 {
     public:
     Registers( )
-    : gyro_raw( this, DREG_GYRO_RAW_XY, 3 )
-    , accel_raw( this, DREG_ACCEL_RAW_XY, 3 )
-    , mag_raw( this, DREG_MAG_RAW_XY, 3 )
-    , gyro( this, DREG_GYRO_PROC_X, 3, 1.0 * TO_RADIANS )
+    : gyro( this, DREG_GYRO_PROC_X, 3, 1.0 * TO_RADIANS )
     , accel( this, DREG_ACCEL_PROC_X, 3, 9.80665 )
     , mag( this, DREG_MAG_PROC_X, 3, 1.0 )
-    , euler( this, DREG_EULER_PHI_THETA, 3, 0.0109863 * TO_RADIANS )
-    , quat( this, DREG_QUAT_AB, 4, 0.0000335693 )
+    , gyr_t( this, DREG_GYRO_PROC_TIME, 1, 1.0 )
+    //, gyro_raw( this, DREG_GYRO_RAW_XY, 3 )
+    //, accel_raw( this, DREG_ACCEL_RAW_XY, 3 )
+    //, mag_raw( this, DREG_MAG_RAW_XY, 3 )
+    //, euler( this, DREG_EULER_PHI_THETA, 3, 0.0109863 * TO_RADIANS )
+    //, quat( this, DREG_QUAT_AB, 4, 0.0000335693 )
     , temperature( this, DREG_TEMPERATURE, 1 )
     , communication( this, CREG_COM_SETTINGS, 1 )
     , comrate2( this, CREG_COM_RATES2, 1 )
@@ -182,9 +183,12 @@ class Registers
     }
 
     // Data
-    const Accessor< int16_t > gyro_raw, accel_raw, euler, mag_raw, quat;
+    // const Accessor< int16_t > gyro_raw, accel_raw, mag_raw;
+    // const Accessor< int16_t > euler, quat;
 
-    const Accessor< float > gyro, accel, mag, temperature;
+    const Accessor< float > gyro, accel, mag;
+    const Accessor< float > temperature;
+    const Accessor< float > gyr_t;
 
     // Configs
     const Accessor< uint32_t > communication, misc_config, status, comrate2, comrate4, comrate5, comrate6;
