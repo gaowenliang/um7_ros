@@ -33,11 +33,11 @@ roslaunch um7 um7.launch
 
 * Connect via the serial Interface to configure the UM7:
 
-<img src="docs/1.png">
+<img src="docs/1.png"  width=320 height=379 >
 
-<img src="docs/2.png">
+<img src="docs/2.png" width=320 height=379 >
 
-<img src="docs/3.png">
+<img src="docs/3.png" width=320 height=379 >
 
 ROS driver for the CH Robotics UM7 inertial measurement device.
 Supports standard data and mag topics as well as providing temperature and rpy outputs.
