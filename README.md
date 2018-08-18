@@ -18,6 +18,8 @@ sudo ./install.sh
 cd YOUR_ROS_WORKSPACE_SRC/um7/scripts
 sudo ./set.sh
 ```
+Maybe the name of serial port need to change in the `set.sh` file. Defalt is `/dev/ttyUSB0`.
+
 Some parameters can be changed in the launch file, and 
 ```
 roslaunch um7 um7.launch
@@ -31,11 +33,11 @@ roslaunch um7 um7.launch
 
 * Connect via the serial Interface to configure the UM7:
 
-<img src="docs/line2.jpg">
+<img src="docs/1.png">
 
-<img src="docs/line2.jpg">
+<img src="docs/2.png">
 
-<img src="docs/line2.jpg">
+<img src="docs/3.png">
 
 ROS driver for the CH Robotics UM7 inertial measurement device.
 Supports standard data and mag topics as well as providing temperature and rpy outputs.
